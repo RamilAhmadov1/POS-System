@@ -1,0 +1,269 @@
+#!/usr/bin/env python
+# coding: utf-8
+
+# In[ ]:
+
+
+import string
+from datetime import date
+
+NEW_SALE = '1'
+RETURN_ITEM = '2'
+BACKROOM_OPERATIONS = '3'
+EXIT_APPLICATION = '9'
+
+print('Welcome to the POS System')
+
+class Security:
+    count = 0
+    blocked = False
+    
+    def validateCredentials(self, userid, password):
+        if not self.blocked:
+            if userid == "Ali" and password == "pass":
+                return True
+            else:
+                self.count += 1
+                if self.count >= 3:
+                    self.blocked = True
+                    print(userid,"Your account has been locked out. Please contact your system admin.")
+                    return False  
+                else:
+                    print("You entered a wrong user id or password")
+        else:
+            print(userid, "Your account has been locked out. Please contact your system admin.")
+            return False 
+
+class Item:
+    def __init__(self, pItem_UPC, pItem_Description, pItem_Max_Qty, pItem_Order_Threshold, pItem_replenishment_order_qty, pItem_on_hand, pItem_Unit_Price):
+        self.__Item_UPC = pItem_UPC
+        self.__Item_Description = pItem_Description
+        self.__Item_Max_Qty = pItem_Max_Qty
+        self.__Item_Order_Threshold = pItem_Order_Threshold
+        self.__Item_replenishment_order_qty = pItem_replenishment_order_qty
+        self.__Item_on_hand = pItem_on_hand    
+        self.__Item_Unit_Price = pItem_Unit_Price
+
+    def getUPC(self):
+        return self.__Item_UPC
+
+    def getDescription(self):
+        return self.__Item_Description
+
+    def getMax_Qty(self):
+        return self.__Item_Max_Qty
+
+    def getOrderThreshold(self):
+        return self.__Item_Order_Threshold
+
+    def getItemReplenishmentOrderQty(self):
+        return self.__Item_replenishment_order_qty
+
+    def getItemonHand(self):
+        return int(self.__Item_on_hand)
+
+    def getItem_Price(self):
+        return float(self.__Item_Unit_Price)
+    
+    def updateTheUnitOnHand(self, numberOfItems):
+        self.__Item_on_hand += numberOfItems
+
+class ItemCollection:
+    def __init__(self):
+        self.__itemsDict = {}
+        
+    def addItem(self, upc, description, max_qty, order_threshold, replenishment_order_qty, on_hand, unit_price):
+        self.__itemsDict[upc] = Item(upc, description, max_qty, order_threshold, replenishment_order_qty, on_hand, unit_price)
+
+    def printAllKeys(self):
+        print(self.__itemsDict.keys())
+        
+    def getUPCs(self):
+        return [item.getUPC() for item in self.__itemsDict.values()]
+    
+    def getDescriptions(self):
+        return [item.getDescription() for item in self.__itemsDict.values()]
+    
+    def getPrice(self, upc):
+        if upc in self.__itemsDict:
+            return self.__itemsDict[upc].getItem_Price()
+        else:
+            return None
+    
+    def getItemByUPC(self, upc):
+        return self.__itemsDict.get(upc)
+    
+    def generateInventoryReport(self):
+        report = "Inventory Report:\n"
+        report += "UPC, Description, On Hand, Order Threshold, Max Qty\n"
+        for item in self.__itemsDict.values():
+            report += f"{item.getUPC()}, {item.getDescription()}, {item.getItemonHand()}, {item.getOrderThreshold()}, {item.getMax_Qty()}\n"
+        return report
+
+class Store:
+    def __init__(self):
+        self.entry_number = 1  
+        self.receipt_number = 1  
+        self.sales = []  
+    
+    def storeFile(self, description, price, receipt_number):
+        with open("Store_Items.txt", 'a') as file_object:
+            file_object.write(f"{self.entry_number}: Description: {description}, Price: {price}, Receipt: {receipt_number}, Date: {date.today()}\n")
+            self.entry_number += 1
+            self.sales.append((description, price, receipt_number, str(date.today())))
+            
+    def getReceiptNumber(self):
+        return str(self.receipt_number)
+    
+    def generateSalesReport(self):
+        today = str(date.today())
+        report = "Sales Report for Today:\n"
+        report += "Description, Price, Receipt\n"
+        total_sales = 0
+        for sale in self.sales:
+            if sale[3] == today:
+                report += f"{sale[0]}, {sale[1]}, {sale[2]}\n"
+                total_sales += sale[1]
+        report += f"Total Sales: {total_sales}\n"
+        return report
+
+def generate_receipt_number(length=8):
+    """Generate a random alphanumeric receipt number."""
+    characters = string.ascii_letters + string.digits
+    return ''.join(random.choice(characters) for _ in range(length))
+
+def read_file():
+    items = ItemCollection()
+    with open('RetailStoreItemData.txt', 'r') as file:
+        lines = file.readlines()
+        for line in lines[1:]:
+            temp = line.strip().split(',')
+            upc = temp[0]
+            item_description = temp[1]
+            item_price = temp[6]
+            max_qty = temp[2]
+            order_threshold = temp[3]
+            replenishment_order_qty = temp[4]
+            on_hand = temp[5]
+            items.addItem(upc, item_description, max_qty, order_threshold, replenishment_order_qty, on_hand, item_price)
+    return items
+
+def process_new_sale(items, store_obj):
+    while True:
+        answer = input("Please Enter the UPC:")
+        if answer in items.getUPCs():
+            index = items.getUPCs().index(answer)
+            description = items.getDescriptions()[index]
+            print("You entered", description)
+            quantity = int(input("Please enter quantity: "))
+            n = items.getPrice(answer)
+            receipt_number = store_obj.getReceiptNumber()
+            print('Receipt number:', receipt_number) 
+            print('The price is', quantity * n)
+            print('1 = Sell another item, 2 = Return Item/s, 9 = Complete Sale')
+
+            select = input('Please select your option: ')
+            if select == '9':
+                print('Your total is:', quantity * n)
+                print('Receipt number:', receipt_number) 
+                store_obj.storeFile(description, quantity * n, receipt_number)
+                #store_obj.receipt_number += 1  # Increment the sequential receipt number
+                return receipt_number
+            elif select == '2':
+                return process_return_item(items, store_obj)  # Return to main loop for handling returns
+        else:
+            print("Invalid UPC.")
+
+def process_return_item(items, store_obj):
+    receipt_number = input("Please Enter the receipt number: ")
+    saved_receipt = store_obj.getReceiptNumber()
+    if receipt_number == saved_receipt:
+        print("Receipt number matched.")
+        option = input("1 = Return Single item, 2 = Return All items: ")
+        if option == '1':
+            upc = input("Please enter UPC to be returned: ")
+            item = items.getItemByUPC(upc)
+            if item:
+                description = item.getDescription()
+                print("You entered:", description)
+                quantity = int(input("Please enter quantity to return: "))
+                price = item.getItem_Price()
+                return_amount = float(quantity) * float(price)  # Convert strings to floats
+                print("Return Amount:", return_amount)
+            else:
+                print("Invalid UPC.")
+        elif option == '2':
+            confirm = input("Are you sure you want to return all items? Y = yes, N = no : ")
+            if confirm.upper() == 'Y':
+                total_return_amount = 0
+                with open("Store_Items.txt", 'r') as file_object:
+                    lines = file_object.readlines()
+                    for line in lines:
+                        if "Receipt" in line and receipt_number in line:
+                            price = float(line.split("Price: ")[1].split(", Receipt: ")[0].strip())
+                            total_return_amount += price
+                if total_return_amount == 0:  
+                    print("No items found for return.")
+                else:
+                    print("Total Return Amount:", total_return_amount)
+            elif confirm.upper() == 'N':
+                print("Return all items operation cancelled.")
+            else:
+                print("Invalid option.")
+        else:
+            print("Invalid option.")
+    else:
+        print("Receipt number does not match.")
+
+def process_backroom_operations(items, store_obj):
+    print("Retail Store Inventory Data:")
+    print(items.generateInventoryReport())
+    print(store_obj.generateSalesReport())
+
+def main():
+    store_obj = Store()  
+    userid = input("Please enter User ID:")
+    password = input("Please enter Password:")
+    security_obj = Security()
+    status = security_obj.validateCredentials(userid, password)
+
+    while not status:
+        userid = input("Please enter User ID:")
+        password = input("Please enter Password:")
+        status = security_obj.validateCredentials(userid, password)
+
+    items = read_file()
+
+    while True:
+        print("1 = New Sale, 2 = ReturnItem/s, 3 = Backroom Operations, 9 = Exit Application")
+        selection = input("Please select your option: ")
+
+        if selection == NEW_SALE:
+            receipt_number = process_new_sale(items, store_obj)
+            if receipt_number is None:
+                continue
+            while True:
+                continue_sale = input("1 = New Sale, 2 = ReturnItem/s, 3 = Backroom Operations, 9 = Exit Application: ")
+                if continue_sale == RETURN_ITEM:
+                    process_return_item(items, store_obj)
+                elif continue_sale == BACKROOM_OPERATIONS:
+                    process_backroom_operations(items, store_obj)
+                elif continue_sale == EXIT_APPLICATION:
+                    print("Exiting the application...")
+                    return  
+                elif continue_sale == NEW_SALE:
+                    receipt_number = process_new_sale(items, store_obj)
+                    if receipt_number is None:
+                        break
+        elif selection == RETURN_ITEM:
+            process_return_item(items, store_obj)
+        elif selection == BACKROOM_OPERATIONS:
+            process_backroom_operations(items, store_obj)
+        elif selection == EXIT_APPLICATION:
+            print("Exiting the application...")
+            break
+        else:
+            print("Invalid option. Please select a valid option.")
+
+if __name__ == "__main__":
+    main()
